@@ -58,7 +58,7 @@ html,body{
 
 /* Wave */
 .wave-container{
-  position:relative;width:100%;height:35px;overflow:hidden;
+  position:relative;width:calc(100% + 32px);margin-left:-16px;height:35px;overflow:hidden;
   margin-top:8px;
 }
 .wave-track{
@@ -99,6 +99,7 @@ html,body{
   background:var(--card);border:1px solid var(--bdr);
   border-radius:var(--rad);box-shadow:0 1px 4px rgba(0,0,0,.06);
   padding:12px 10px;text-align:center;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
 }
 .stat-val{font-size:26px;font-weight:700;color:var(--blue);line-height:1.1}
 .stat-val span{font-size:14px;font-weight:600}
@@ -122,12 +123,13 @@ html,body{
 .log-table th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--txs);padding:8px 5px;border-bottom:2px solid var(--bdr);font-weight:700}
 .log-table td{padding:9px 5px;border-bottom:1px solid #e8eff7;vertical-align:middle}
 .log-table tr:last-child td{border-bottom:none}
+.log-table tbody tr{cursor:pointer;transition:background .15s;-webkit-user-select:none;user-select:none}
+.log-table tbody tr.lp-highlight{background:#e3f2fd}
+.log-hint{text-align:center;font-size:10px;color:var(--txs);padding:8px 0 4px;opacity:.6}
 .pool-tag{display:inline-block;font-size:9px;font-weight:700;padding:2px 7px;border-radius:6px;text-transform:uppercase;letter-spacing:.3px}
 .pool-tag.manly{background:#e3f2fd;color:#0d47a1}
 .pool-tag.warringah{background:var(--gn);color:var(--gnt)}
 .pool-tag.openwater{background:var(--am);color:var(--amt)}
-.log-actions button{background:none;border:none;cursor:pointer;padding:3px;font-size:14px;opacity:.45}
-.log-actions button:hover{opacity:1}
 
 /* ─── FAB ─── */
 .fab{
@@ -141,14 +143,14 @@ html,body{
 .fab:active{transform:translateX(-50%) scale(.9)}
 
 /* ─── MODAL ─── */
-.modal-bg{display:none;position:fixed;inset:0;background:rgba(10,22,40,.45);z-index:300;align-items:flex-end;justify-content:center}
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(10,22,40,.45);z-index:300;align-items:center;justify-content:center}
 .modal-bg.show{display:flex}
-.modal{background:var(--card);width:100%;max-width:430px;border-radius:16px 16px 0 0;padding:20px 20px calc(20px + var(--safe-bottom));animation:slideUp .25s ease}
+.modal{background:var(--card);width:100%;max-width:430px;border-radius:16px;padding:20px;max-height:85dvh;overflow-y:auto;animation:slideUp .25s ease}
 @keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
 .modal h2{font-size:17px;font-weight:700;margin-bottom:14px}
 .fg{margin-bottom:12px}
 .fg label{display:block;font-size:11px;font-weight:600;color:var(--txs);margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px}
-.fg input,.fg select{width:100%;padding:10px 12px;border:1px solid var(--bdr);border-radius:8px;font-size:15px;font-family:inherit;background:#f8fafc;color:var(--tx)}
+.fg input,.fg select{width:100%;padding:10px 12px;border:1px solid var(--bdr);border-radius:8px;font-size:16px;font-family:inherit;background:#f8fafc;color:var(--tx)}
 .fg input:focus,.fg select:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(26,115,232,.12)}
 .modal-btns{display:flex;gap:8px;margin-top:14px}
 .modal-btns button{flex:1;padding:12px;border-radius:10px;font-size:14px;font-weight:600;border:none;cursor:pointer;font-family:inherit}
@@ -203,7 +205,7 @@ html,body{
   </div>
 
   <div class="tab-panel" id="tab-charts">
-    <div class="card"><div class="card-title">Cumulative Distance</div><div class="chart-box"><canvas id="chartDist"></canvas></div></div>
+    <div class="card"><div class="card-title">Weekly Distance (km)</div><div class="chart-box"><canvas id="chartDist"></canvas></div></div>
     <div class="card"><div class="card-title">Visits per Week</div><div class="chart-box"><canvas id="chartWeek"></canvas></div></div>
     <div class="card"><div class="card-title">Break-Even Projection</div><div class="chart-box"><canvas id="chartProj"></canvas></div></div>
   </div>
@@ -211,9 +213,10 @@ html,body{
   <div class="tab-panel" id="tab-log">
     <div class="card" style="padding:6px 0">
       <table class="log-table" id="logTable">
-        <thead><tr><th>#</th><th>Date</th><th>Pool</th><th>Dist</th><th>$/Visit</th><th></th></tr></thead>
+        <thead><tr><th>#</th><th>Date</th><th>Pool</th><th>Dist</th><th>$/Visit</th></tr></thead>
         <tbody></tbody>
       </table>
+    <div class="log-hint">Long press a row to edit</div>
     </div>
   </div>
 </div>
@@ -245,10 +248,9 @@ const STORAGE_KEY='swim-tracker-v4';
 const PASS_COST=898.47;
 const PASS_START='2026-05-27';
 const PASS_END='2027-05-27';
-const CASUAL_COST=8.80;
+const CASUAL_COST=9.36;
 const BE_NEEDED=Math.ceil(PASS_COST/CASUAL_COST);
-const BUILD='15 Jun 2026 18:20 AEST';
-
+const BUILD='15 Jun 2026 20:02 AEST';
 const SEED=[
   {date:'2026-05-25',pool:'Manly ABC',distance:0},
   {date:'2026-05-27',pool:'Manly ABC',distance:1200},
@@ -267,128 +269,183 @@ const SEED=[
   {date:'2026-06-15',pool:'Warringah',distance:3600},
   {date:'2026-06-15',pool:'Manly ABC',distance:0}
 ];
-
 let visits=[],editIdx=-1;
 function load(){const s=localStorage.getItem(STORAGE_KEY);visits=s?JSON.parse(s):JSON.parse(JSON.stringify(SEED));save()}
 function save(){visits.sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0);localStorage.setItem(STORAGE_KEY,JSON.stringify(visits))}
-
-function todayStr(){return new Date().toISOString().slice(0,10)}
-function fmtD(d){const p=d.split('-');return p[2]+'/'+p[1]+'/'+p[0].slice(2)}
-function getMonday(ds){const d=new Date(ds+'T00:00:00');const day=d.getDay();const diff=d.getDate()-day+(day===0?-6:1);const m=new Date(d);m.setDate(diff);return m.toISOString().slice(0,10)}
-function weekLbl(m){const s=new Date(m+'T00:00:00');const e=new Date(s);e.setDate(e.getDate()+6);return s.toLocaleDateString('en-AU',{day:'numeric',month:'short'})+' – '+e.toLocaleDateString('en-AU',{day:'numeric',month:'short'})}
-function daysSince(dateStr){const d=new Date(dateStr+'T00:00:00');const s=new Date(PASS_START+'T00:00:00');return Math.round((d-s)/(864e5))}
+function localDateStr(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
+function todayStr(){return localDateStr(new Date())}
+function fmtD(d){const dt=new Date(d+'T12:00:00');const days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];const dn=days[dt.getDay()];const p=d.split('-');return dn+' '+p[2]+'/'+p[1]+'/'+p[0].slice(2)}
+function getMonday(ds){const d=new Date(ds+'T12:00:00');const day=d.getDay();const diff=d.getDate()-day+(day===0?-6:1);const m=new Date(d);m.setDate(diff);return localDateStr(m)}
+function weekLbl(m){const s=new Date(m+'T12:00:00');const e=new Date(s);e.setDate(e.getDate()+6);return s.toLocaleDateString('en-AU',{day:'numeric',month:'short'})+' \u2013 '+e.toLocaleDateString('en-AU',{day:'numeric',month:'short'})}
+function daysSince(dateStr){const d=new Date(dateStr+'T12:00:00');const s=new Date(PASS_START+'T12:00:00');return Math.round((d-s)/(864e5))}
 function poolVisits(){return visits.filter(v=>v.pool!=='Open Water')}
 
+/* ── Swipe gesture ── */
+const tabOrder=['overview','charts','log'];
+let swipeX0=0,swipeY0=0;
+document.addEventListener('touchstart',function(e){swipeX0=e.changedTouches[0].screenX;swipeY0=e.changedTouches[0].screenY},{passive:true});
+document.addEventListener('touchend',function(e){
+  const dx=swipeX0-e.changedTouches[0].screenX;
+  const dy=swipeY0-e.changedTouches[0].screenY;
+  if(Math.abs(dx)<50||Math.abs(dx)<Math.abs(dy))return;
+  const cur=document.querySelector('.tab.active').dataset.tab;
+  const idx=tabOrder.indexOf(cur);
+  if(dx>0&&idx<tabOrder.length-1)switchTab(tabOrder[idx+1]);
+  else if(dx<0&&idx>0)switchTab(tabOrder[idx-1]);
+},{passive:true});
+function switchTab(name){
+  document.querySelectorAll('.tab').forEach(function(x){x.classList.remove('active')});
+  document.querySelectorAll('.tab-panel').forEach(function(x){x.classList.remove('active')});
+  document.querySelector('.tab[data-tab="'+name+'"]').classList.add('active');
+  document.getElementById('tab-'+name).classList.add('active');
+  if(name==='charts')setTimeout(renderCharts,50);
+}
+
+/* ── Long press ── */
+function setupLongPress(){
+  var rows=document.querySelectorAll('#logTable tbody tr');
+  rows.forEach(function(row,ri){
+    var vi=visits.length-1-ri;
+    var timer=null;
+    function startLP(){
+      timer=setTimeout(function(){
+        row.classList.add('lp-highlight');
+        if(navigator.vibrate)navigator.vibrate(25);
+        openEdit(vi);
+        setTimeout(function(){row.classList.remove('lp-highlight')},300);
+      },500);
+    }
+    function cancelLP(){if(timer){clearTimeout(timer);timer=null}}
+    row.addEventListener('touchstart',startLP,{passive:true});
+    row.addEventListener('touchend',cancelLP);
+    row.addEventListener('touchmove',cancelLP);
+    row.addEventListener('mousedown',startLP);
+    row.addEventListener('mouseup',cancelLP);
+    row.addEventListener('mouseleave',cancelLP);
+  });
+}
+
 function render(){
-  const all=visits;
-  const pv=poolVisits();
-  const n=all.length;
-  const pn=pv.length;
-  const totalDist=all.reduce((s,v)=>s+(v.distance||0),0);
-  const cpv=pn>0?(PASS_COST/pn):0;
+  var all=visits;
+  var pv=poolVisits();
+  var n=all.length;
+  var pn=pv.length;
+  var totalDist=all.reduce(function(s,v){return s+(v.distance||0)},0);
+  var cpv=pn>0?(PASS_COST/pn):0;
+  var td=todayStr();
 
-  const td=todayStr();
-  const tdD=new Date(td+'T00:00:00');
-  const d7=new Date(tdD);d7.setDate(d7.getDate()-6);
-  const d7s=d7.toISOString().slice(0,10);
-  const roll7=all.filter(v=>v.date>=d7s&&v.date<=td).reduce((s,v)=>s+(v.distance||0),0);
+  /* 7-day rolling – use local dates */
+  var now=new Date();
+  var d7=new Date(now.getFullYear(),now.getMonth(),now.getDate()-6);
+  var d7s=localDateStr(d7);
+  var roll7=all.filter(function(v){return v.date>=d7s&&v.date<=td}).reduce(function(s,v){return s+(v.distance||0)},0);
 
-  const mon=getMonday(td);
-  const sunD=new Date(mon+'T00:00:00');sunD.setDate(sunD.getDate()+6);
-  const sunS=sunD.toISOString().slice(0,10);
-  const twDist=all.filter(v=>v.date>=mon&&v.date<=sunS).reduce((s,v)=>s+(v.distance||0),0);
-  const twVis=all.filter(v=>v.date>=mon&&v.date<=sunS).length;
+  /* This week Mon-Sun */
+  var mon=getMonday(td);
+  var sunD=new Date(mon+'T12:00:00');sunD.setDate(sunD.getDate()+6);
+  var sunS=localDateStr(sunD);
+  var twDist=all.filter(function(v){return v.date>=mon&&v.date<=sunS}).reduce(function(s,v){return s+(v.distance||0)},0);
+  var twVis=all.filter(function(v){return v.date>=mon&&v.date<=sunS}).length;
 
-  const beLeft=Math.max(0,BE_NEEDED-pn);
-  const bePct=Math.min(100,(pn/BE_NEEDED)*100);
+  /* Break-even */
+  var beLeft=Math.max(0,BE_NEEDED-pn);
+  var bePct=Math.min(100,(pn/BE_NEEDED)*100);
+  var passEnd=new Date(PASS_END+'T12:00:00');
+  var todayD=new Date(td+'T12:00:00');
+  var wksLeft=Math.max(0.1,(passEnd-todayD)/(7*864e5));
+  var wklyNeeded=beLeft>0?(beLeft/wksLeft).toFixed(1):'0.0';
 
-  const passEnd=new Date(PASS_END+'T00:00:00');
-  const now=new Date(td+'T00:00:00');
-  const wksLeft=Math.max(0.1,(passEnd-now)/(7*864e5));
-  const wklyNeeded=beLeft>0?(beLeft/wksLeft).toFixed(1):'0.0';
+  /* Lily visits (distance === 0) */
+  var lilyVisits=all.filter(function(v){return (v.distance||0)===0}).length;
 
   document.getElementById('statGrid').innerHTML=
     '<div class="stat-card"><div class="stat-val">'+n+'</div><div class="stat-lbl">Total Visits</div></div>'+
-    '<div class="stat-card"><div class="stat-val">$'+cpv.toFixed(2)+'</div><div class="stat-lbl">Cost / Visit</div><div class="stat-sub">Target ≤ $'+CASUAL_COST.toFixed(2)+'</div></div>'+
+    '<div class="stat-card"><div class="stat-val">$'+cpv.toFixed(2)+'</div><div class="stat-lbl">Cost / Visit</div><div class="stat-sub">Target \u2264 $'+CASUAL_COST.toFixed(2)+'</div></div>'+
     '<div class="stat-card"><div class="stat-val">'+(totalDist/1000).toFixed(1)+'<span>km</span></div><div class="stat-lbl">Total Distance</div></div>'+
     '<div class="stat-card"><div class="stat-val">'+wklyNeeded+'</div><div class="stat-lbl">Visits/Wk Needed</div><div class="stat-sub">To break even by expiry</div></div>'+
     '<div class="stat-card"><div class="stat-val">'+(roll7/1000).toFixed(1)+'<span>km</span></div><div class="stat-lbl">7-Day Rolling</div></div>'+
-    '<div class="stat-card"><div class="stat-val">'+(twDist/1000).toFixed(1)+'<span>km</span></div><div class="stat-lbl">This Week</div><div class="stat-sub">'+twVis+' visit'+(twVis!==1?'s':'')+'</div></div>';
+    '<div class="stat-card"><div class="stat-val">'+(twDist/1000).toFixed(1)+'<span>km</span></div><div class="stat-lbl">This Week</div><div class="stat-sub">'+twVis+' visit'+(twVis!==1?'s':'')+'</div></div>'+
+    '<div class="stat-card"><div class="stat-val">'+lilyVisits+'</div><div class="stat-lbl">Lily\'s Visits \uD83E\uDDD2</div><div class="stat-sub">Play pool</div></div>';
 
+  /* Break-even card */
   document.getElementById('breakEvenCard').innerHTML=
     '<div class="card-title">Break-Even Progress</div>'+
     '<div style="display:flex;justify-content:space-between;font-size:13px;font-weight:600;margin-bottom:2px">'+
     '<span>'+pn+' of '+BE_NEEDED+' visits</span>'+
-    '<span>'+(beLeft>0?beLeft+' to go':'✅ Achieved!')+'</span></div>'+
+    '<span>'+(beLeft>0?beLeft+' to go':'\u2705 Achieved!')+'</span></div>'+
     '<div class="progress-wrap"><div class="progress-bar" style="width:'+bePct+'%"></div><div class="progress-txt">'+bePct.toFixed(1)+'%</div></div>'+
-    '<div style="font-size:10px;color:var(--txs);margin-top:5px;text-align:center">Based on $'+CASUAL_COST.toFixed(2)+' casual swim entry · '+Math.ceil(wksLeft)+' weeks remaining</div>';
+    '<div style="font-size:10px;color:var(--txs);margin-top:5px;text-align:center">Based on 20-visit pass rate ($'+CASUAL_COST.toFixed(2)+'/visit) \u00b7 '+Math.ceil(wksLeft)+' weeks remaining</div>';
 
-  const pools={};
-  all.forEach(v=>{if(!pools[v.pool])pools[v.pool]={c:0,d:0};pools[v.pool].c++;pools[v.pool].d+=(v.distance||0)});
-  let ph='';
-  for(const[nm,dt]of Object.entries(pools)){
+  /* Pool breakdown */
+  var pools={};
+  all.forEach(function(v){if(!pools[v.pool])pools[v.pool]={c:0,d:0};pools[v.pool].c++;pools[v.pool].d+=(v.distance||0)});
+  var ph='';
+  for(var nm in pools){if(pools.hasOwnProperty(nm)){
+    var dt=pools[nm];
     ph+='<div class="pool-pill"><div class="pill-name">'+nm+'</div><div class="pill-count">'+dt.c+'</div><div class="pill-sub">'+(dt.d/1000).toFixed(1)+' km</div></div>';
-  }
+  }}
   document.getElementById('poolBreakdown').innerHTML='<div class="card-title">Pool Breakdown</div><div class="pool-pills">'+ph+'</div>';
 
-  const tb=document.querySelector('#logTable tbody');tb.innerHTML='';
-  for(let i=all.length-1;i>=0;i--){
-    const v=all[i];
-    const ac=(PASS_COST/(i+1)).toFixed(2);
-    let cls='manly';if(v.pool==='Warringah')cls='warringah';if(v.pool==='Open Water')cls='openwater';
-    const tr=document.createElement('tr');
-    tr.innerHTML='<td style="font-weight:600;color:var(--txs)">'+(i+1)+'</td><td>'+fmtD(v.date)+'</td><td><span class="pool-tag '+cls+'">'+v.pool+'</span></td><td>'+(v.distance||0)+'m</td><td>$'+ac+'</td><td class="log-actions"><button onclick="openEdit('+i+')">✏️</button></td>';
+  /* Log table – no edit button column */
+  var tb=document.querySelector('#logTable tbody');tb.innerHTML='';
+  for(var i=all.length-1;i>=0;i--){
+    var v=all[i];
+    var ac=(PASS_COST/(i+1)).toFixed(2);
+    var cls='manly';if(v.pool==='Warringah')cls='warringah';if(v.pool==='Open Water')cls='openwater';
+    var tr=document.createElement('tr');
+    tr.innerHTML='<td style="font-weight:600;color:var(--txs)">'+(i+1)+'</td><td>'+fmtD(v.date)+'</td><td><span class="pool-tag '+cls+'">'+v.pool+'</span></td><td>'+(v.distance||0)+'m</td><td>$'+ac+'</td>';
     tb.appendChild(tr);
   }
+  setupLongPress();
   renderCharts();
 }
 
-let cD,cW,cP;
+var cD,cW,cP;
 function renderCharts(){
-  // Cumulative Distance (km)
-  const lbl=visits.map((_,i)=>i+1);
-  let cum=0;const cumD=visits.map(v=>{cum+=(v.distance||0);return +(cum/1000).toFixed(2)});
+  /* Weekly Distance (km) – last 12 weeks */
+  var td=todayStr();
+  var curMon=getMonday(td);
+  var weeks12=[];
+  for(var i=11;i>=0;i--){
+    var d=new Date(curMon+'T12:00:00');d.setDate(d.getDate()-i*7);
+    weeks12.push(localDateStr(d));
+  }
+  var wkDist=weeks12.map(function(mon){
+    var sunD=new Date(mon+'T12:00:00');sunD.setDate(sunD.getDate()+6);
+    var sun=localDateStr(sunD);
+    return +(visits.filter(function(v){return v.date>=mon&&v.date<=sun}).reduce(function(s,v){return s+(v.distance||0)},0)/1000).toFixed(2);
+  });
   if(cD)cD.destroy();
   cD=new Chart(document.getElementById('chartDist'),{
     type:'line',
-    data:{labels:lbl,datasets:[{data:cumD,borderColor:'#1a73e8',backgroundColor:'rgba(26,115,232,.08)',fill:true,tension:.3,pointRadius:3,pointBackgroundColor:'#1a73e8',borderWidth:2}]},
-    options:{responsive:true,plugins:{legend:{display:false}},scales:{x:{title:{display:true,text:'Visit #',font:{size:11}},grid:{display:false}},y:{title:{display:true,text:'km',font:{size:11}},beginAtZero:true}}}
+    data:{labels:weeks12.map(weekLbl),datasets:[{data:wkDist,borderColor:'#1a73e8',backgroundColor:'rgba(26,115,232,.08)',fill:true,tension:.3,pointRadius:4,pointBackgroundColor:'#1a73e8',borderWidth:2}]},
+    options:{responsive:true,plugins:{legend:{display:false}},scales:{x:{grid:{display:false},ticks:{font:{size:9},maxRotation:45}},y:{title:{display:true,text:'km',font:{size:11}},beginAtZero:true}}}
   });
 
-  // Visits per Week
-  const wm={};visits.forEach(v=>{const m=getMonday(v.date);wm[m]=(wm[m]||0)+1});
-  const wks=Object.keys(wm).sort();
+  /* Visits per Week */
+  var wm={};visits.forEach(function(v){var m=getMonday(v.date);wm[m]=(wm[m]||0)+1});
+  var wks=Object.keys(wm).sort();
   if(cW)cW.destroy();
   cW=new Chart(document.getElementById('chartWeek'),{
     type:'bar',
-    data:{labels:wks.map(weekLbl),datasets:[{data:wks.map(w=>wm[w]),backgroundColor:'rgba(79,195,247,.55)',borderColor:'#4fc3f7',borderWidth:1,borderRadius:6}]},
+    data:{labels:wks.map(weekLbl),datasets:[{data:wks.map(function(w){return wm[w]}),backgroundColor:'rgba(79,195,247,.55)',borderColor:'#4fc3f7',borderWidth:1,borderRadius:6}]},
     options:{responsive:true,plugins:{legend:{display:false}},scales:{x:{grid:{display:false},ticks:{font:{size:9}}},y:{beginAtZero:true,ticks:{stepSize:1}}}}
   });
 
-  // Break-Even Projection
-  const pv=poolVisits();
-  const totalDays=365;
-
-  // Required pace line
-  const pacePoints=[];
-  for(let d=0;d<=totalDays;d+=5)pacePoints.push({x:d,y:+(BE_NEEDED*d/totalDays).toFixed(1)});
+  /* Break-Even Projection */
+  var pv=poolVisits();
+  var totalDays=365;
+  var pacePoints=[];
+  for(var d=0;d<=totalDays;d+=5)pacePoints.push({x:d,y:+(BE_NEEDED*d/totalDays).toFixed(1)});
   if(pacePoints[pacePoints.length-1].x!==totalDays)pacePoints.push({x:totalDays,y:BE_NEEDED});
-
-  // Actual progress
-  const actualPoints=[{x:0,y:0}];
-  const byDate={};
-  pv.forEach(v=>{byDate[v.date]=(byDate[v.date]||0)+1});
-  const dates=Object.keys(byDate).sort();
-  let cumV=0;
-  dates.forEach(d=>{
-    cumV+=byDate[d];
-    actualPoints.push({x:daysSince(d),y:cumV});
-  });
-
-  // Today marker
-  const todayDay=daysSince(todayStr());
-  const todayVisits=pv.length;
-
+  var actualPoints=[{x:0,y:0}];
+  var byDate={};
+  pv.forEach(function(v){byDate[v.date]=(byDate[v.date]||0)+1});
+  var dates=Object.keys(byDate).sort();
+  var cumV=0;
+  dates.forEach(function(d){cumV+=byDate[d];actualPoints.push({x:daysSince(d),y:cumV})});
+  var todayDay=daysSince(todayStr());
+  var todayVisits=pv.length;
   if(cP)cP.destroy();
   cP=new Chart(document.getElementById('chartProj'),{
     type:'scatter',
@@ -414,17 +471,16 @@ function renderCharts(){
 }
 
 function openAdd(){editIdx=-1;document.getElementById('modalTitle').textContent='Add Visit';document.getElementById('inDate').value=todayStr();document.getElementById('inPool').value='Manly ABC';document.getElementById('inDist').value='';document.getElementById('modalBtns').innerHTML='<button class="btn-cancel" onclick="closeModal()">Cancel</button><button class="btn-save" onclick="saveVisit()">Save</button>';document.getElementById('modalBg').classList.add('show')}
-function openEdit(i){editIdx=i;const v=visits[i];document.getElementById('modalTitle').textContent='Edit Visit #'+(i+1);document.getElementById('inDate').value=v.date;document.getElementById('inPool').value=v.pool;document.getElementById('inDist').value=v.distance||0;document.getElementById('modalBtns').innerHTML='<button class="btn-delete" onclick="delVisit()">Delete</button><button class="btn-cancel" onclick="closeModal()">Cancel</button><button class="btn-save" onclick="saveVisit()">Save</button>';document.getElementById('modalBg').classList.add('show')}
+function openEdit(i){editIdx=i;var v=visits[i];document.getElementById('modalTitle').textContent='Edit Visit #'+(i+1);document.getElementById('inDate').value=v.date;document.getElementById('inPool').value=v.pool;document.getElementById('inDist').value=v.distance||0;document.getElementById('modalBtns').innerHTML='<button class="btn-delete" onclick="delVisit()">Delete</button><button class="btn-cancel" onclick="closeModal()">Cancel</button><button class="btn-save" onclick="saveVisit()">Save</button>';document.getElementById('modalBg').classList.add('show')}
 function closeModal(){document.getElementById('modalBg').classList.remove('show')}
-function saveVisit(){const d=document.getElementById('inDate').value;const p=document.getElementById('inPool').value;const m=parseInt(document.getElementById('inDist').value)||0;if(!d)return;if(editIdx>=0){visits[editIdx]={date:d,pool:p,distance:m}}else{visits.push({date:d,pool:p,distance:m})}save();closeModal();render()}
+function saveVisit(){var d=document.getElementById('inDate').value;var p=document.getElementById('inPool').value;var m=parseInt(document.getElementById('inDist').value)||0;if(!d)return;if(editIdx>=0){visits[editIdx]={date:d,pool:p,distance:m}}else{visits.push({date:d,pool:p,distance:m})}save();closeModal();render()}
 function delVisit(){if(editIdx>=0&&confirm('Delete this visit?')){visits.splice(editIdx,1);save();closeModal();render()}}
 
-document.querySelectorAll('.tab').forEach(t=>{t.addEventListener('click',()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.tab-panel').forEach(x=>x.classList.remove('active'));t.classList.add('active');document.getElementById('tab-'+t.dataset.tab).classList.add('active');if(t.dataset.tab==='charts')setTimeout(renderCharts,50)})});
-
+/* Tab click listeners */
+document.querySelectorAll('.tab').forEach(function(t){t.addEventListener('click',function(){switchTab(t.dataset.tab)})});
 document.getElementById('fabAdd').addEventListener('click',openAdd);
-document.getElementById('modalBg').addEventListener('click',e=>{if(e.target===e.currentTarget)closeModal()});
-document.getElementById('buildFooter').textContent='Built '+BUILD+' · v4.3';
-
+document.getElementById('modalBg').addEventListener('click',function(e){if(e.target===e.currentTarget)closeModal()});
+document.getElementById('buildFooter').textContent='Built '+BUILD+' \u00b7 v4.4';
 load();render();
 </script>
 </body>
