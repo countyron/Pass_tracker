@@ -28,7 +28,7 @@ html,body{
   min-height:100vh;min-height:100dvh;
 }
 
-/* ─── HEADER (full-width, pool_availability style) ─── */
+/* ─── HEADER ─── */
 .header{
   background:linear-gradient(135deg,#0a1628 0%,#0d3b66 40%,#1a73e8 80%,#4fc3f7 100%);
   color:#fff;
@@ -56,6 +56,23 @@ html,body{
 }
 .header-spacer{height:12px}
 
+/* Sync status */
+.sync-status{
+  font-size:10px;opacity:.7;margin-top:4px;
+  position:relative;z-index:3;letter-spacing:.3px;
+  text-shadow:0 1px 4px rgba(0,0,0,.3);
+  transition:opacity .3s;
+}
+.sync-status .sync-dot{
+  display:inline-block;width:6px;height:6px;border-radius:50%;
+  margin-right:3px;vertical-align:middle;
+}
+.sync-dot.syncing{background:#ffd54f;animation:pulse 1s infinite}
+.sync-dot.synced{background:#69f0ae}
+.sync-dot.offline{background:#90a4ae}
+.sync-dot.error{background:#ef5350}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
 /* Wave */
 .wave-container{
   position:relative;width:calc(100% + 32px);margin-left:-16px;height:35px;overflow:hidden;
@@ -68,7 +85,7 @@ html,body{
 @keyframes waveScroll{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
 .wave-track svg{width:50%;height:100%;flex-shrink:0}
 
-/* ─── TABS (full-width) ─── */
+/* ─── TABS ─── */
 .tabs{display:flex;background:var(--card);border-bottom:1px solid var(--bdr);position:sticky;top:0;z-index:100;width:100%}
 .tab{
   flex:1;padding:11px 0;text-align:center;font-size:13px;font-weight:600;
@@ -77,7 +94,7 @@ html,body{
 }
 .tab.active{color:var(--blue);border-bottom-color:var(--blue)}
 
-/* ─── CONTENT (width-restricted) ─── */
+/* ─── CONTENT ─── */
 .content{
   padding:14px;position:relative;z-index:1;
   padding-bottom:calc(80px + var(--safe-bottom));
@@ -171,10 +188,11 @@ html,body{
 </head>
 <body>
 
-<!-- HEADER (full-width, pool_availability style) -->
+<!-- HEADER -->
 <div class="header">
   <h1>🏊 Swim Tracker</h1>
   <p>Annual Pass · Warringah & Manly Aquatic Centres</p>
+  <div class="sync-status" id="syncStatus"><span class="sync-dot offline"></span> Local only</div>
   <div class="header-spacer"></div>
   <div class="wave-container">
     <div class="wave-track">
@@ -251,7 +269,13 @@ const PASS_START='2026-05-27';
 const PASS_END='2027-05-27';
 const CASUAL_COST=9.36;
 const BE_NEEDED=Math.ceil(PASS_COST/CASUAL_COST);
-const BUILD='15 Jun 2026 20:02 AEST';
+const BUILD='15 Jun 2026 21:30 AEST';
+
+/* ──────────────────────────────────────────────
+   🔗 PASTE YOUR GOOGLE APPS SCRIPT URL BELOW
+   ────────────────────────────────────────────── */
+const SCRIPT_URL='https://script.google.com/macros/s/AKfycbyDK6rbz8pmSOOdffIU1IDNrY7og-bB-fccsZpEK17iBZTnfIPn1jc1Ylqu_fbvBv40EA/exec';
+
 const SEED=[
   {date:'2026-05-25',pool:'Manly ABC',distance:0},
   {date:'2026-05-27',pool:'Manly ABC',distance:1200},
@@ -271,18 +295,95 @@ const SEED=[
   {date:'2026-06-15',pool:'Manly ABC',distance:0}
 ];
 let visits=[],editIdx=-1;
-function load(){const s=localStorage.getItem(STORAGE_KEY);visits=s?JSON.parse(s):JSON.parse(JSON.stringify(SEED));save()}
-function save(){visits.sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0);localStorage.setItem(STORAGE_KEY,JSON.stringify(visits))}
+
+/* ── Sync status indicator ── */
+function showSyncStatus(state,msg){
+  var el=document.getElementById('syncStatus');
+  var dot='<span class="sync-dot '+state+'"></span> ';
+  var labels={syncing:'Syncing…',synced:'Synced ☁️',offline:'Local only',error:'Sync error'};
+  el.innerHTML=dot+(msg||labels[state]||state);
+}
+
+/* ── Cloud sync functions ── */
+function syncToCloud(){
+  if(!SCRIPT_URL)return Promise.resolve();
+  showSyncStatus('syncing');
+  return fetch(SCRIPT_URL,{
+    method:'POST',
+    headers:{'Content-Type':'text/plain'},
+    body:JSON.stringify({visits:visits})
+  })
+  .then(function(r){return r.json()})
+  .then(function(data){
+    if(data.status==='ok'){showSyncStatus('synced')}
+    else{showSyncStatus('error',data.message||'Sync failed')}
+  })
+  .catch(function(err){
+    console.error('Cloud sync error:',err);
+    showSyncStatus('error','Offline – saved locally');
+  });
+}
+
+function loadFromCloud(){
+  if(!SCRIPT_URL){showSyncStatus('offline');return Promise.resolve(null)}
+  showSyncStatus('syncing');
+  return fetch(SCRIPT_URL)
+  .then(function(r){return r.json()})
+  .then(function(data){
+    if(data.status==='ok'){
+      showSyncStatus('synced');
+      return data.visits||[];
+    }else{
+      showSyncStatus('error',data.message||'Load failed');
+      return null;
+    }
+  })
+  .catch(function(err){
+    console.error('Cloud load error:',err);
+    showSyncStatus('error','Offline – using local data');
+    return null;
+  });
+}
+
+/* ── Load & Save ── */
+function load(){
+  /* Load localStorage first for instant display */
+  var s=localStorage.getItem(STORAGE_KEY);
+  visits=s?JSON.parse(s):JSON.parse(JSON.stringify(SEED));
+  save(true); /* save to localStorage only, skip cloud */
+  render();
+
+  /* Then fetch from cloud in background */
+  loadFromCloud().then(function(cloudVisits){
+    if(cloudVisits===null)return; /* cloud unavailable, keep local */
+    if(cloudVisits.length>0){
+      /* Cloud has data – use it as source of truth */
+      visits=cloudVisits;
+      visits.sort(function(a,b){return a.date<b.date?-1:a.date>b.date?1:0});
+      localStorage.setItem(STORAGE_KEY,JSON.stringify(visits));
+      render();
+    }else{
+      /* Cloud is empty – push local data up */
+      syncToCloud();
+    }
+  });
+}
+
+function save(localOnly){
+  visits.sort(function(a,b){return a.date<b.date?-1:a.date>b.date?1:0});
+  localStorage.setItem(STORAGE_KEY,JSON.stringify(visits));
+  if(!localOnly)syncToCloud();
+}
+
 function localDateStr(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
 function todayStr(){return localDateStr(new Date())}
 function fmtD(d){const dt=new Date(d+'T12:00:00');const days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];const dn=days[dt.getDay()];const p=d.split('-');return dn+' '+p[2]+'/'+p[1]+'/'+p[0].slice(2)}
 function getMonday(ds){const d=new Date(ds+'T12:00:00');const day=d.getDay();const diff=d.getDate()-day+(day===0?-6:1);const m=new Date(d);m.setDate(diff);return localDateStr(m)}
 function weekLbl(m){const s=new Date(m+'T12:00:00');const e=new Date(s);e.setDate(e.getDate()+6);return s.toLocaleDateString('en-AU',{day:'numeric',month:'short'})+' \u2013 '+e.toLocaleDateString('en-AU',{day:'numeric',month:'short'})}
 function daysSince(dateStr){const d=new Date(dateStr+'T12:00:00');const s=new Date(PASS_START+'T12:00:00');return Math.round((d-s)/(864e5))}
-function poolVisits(){return visits.filter(v=>v.pool!=='Open Water')}
+function poolVisits(){return visits.filter(function(v){return v.pool!=='Open Water'})}
 
-/* Build month-only labels for a weeks12 array of Monday date strings.
-   Show the short month name only for the first week that falls in a new month. */
+/* Build month-only labels for weeks12 array */
 function buildMonthLabels(weeks12){
   var labels=[];
   var prevMonth=-1;
@@ -353,20 +454,17 @@ function render(){
   var cpv=pn>0?(PASS_COST/pn):0;
   var td=todayStr();
 
-  /* 7-day rolling – use local dates */
   var now=new Date();
   var d7=new Date(now.getFullYear(),now.getMonth(),now.getDate()-6);
   var d7s=localDateStr(d7);
   var roll7=all.filter(function(v){return v.date>=d7s&&v.date<=td}).reduce(function(s,v){return s+(v.distance||0)},0);
 
-  /* This week Mon-Sun */
   var mon=getMonday(td);
   var sunD=new Date(mon+'T12:00:00');sunD.setDate(sunD.getDate()+6);
   var sunS=localDateStr(sunD);
   var twDist=all.filter(function(v){return v.date>=mon&&v.date<=sunS}).reduce(function(s,v){return s+(v.distance||0)},0);
   var twVis=all.filter(function(v){return v.date>=mon&&v.date<=sunS}).length;
 
-  /* Break-even */
   var beLeft=Math.max(0,BE_NEEDED-pn);
   var bePct=Math.min(100,(pn/BE_NEEDED)*100);
   var passEnd=new Date(PASS_END+'T12:00:00');
@@ -374,7 +472,6 @@ function render(){
   var wksLeft=Math.max(0.1,(passEnd-todayD)/(7*864e5));
   var wklyNeeded=beLeft>0?(beLeft/wksLeft).toFixed(1):'0.0';
 
-  /* Lily visits (distance === 0) */
   var lilyVisits=all.filter(function(v){return (v.distance||0)===0}).length;
 
   document.getElementById('statGrid').innerHTML=
@@ -386,7 +483,6 @@ function render(){
     '<div class="stat-card"><div class="stat-val">'+(twDist/1000).toFixed(1)+'<span>km</span></div><div class="stat-lbl">This Week</div><div class="stat-sub">'+twVis+' visit'+(twVis!==1?'s':'')+'</div></div>'+
     '<div class="stat-card"><div class="stat-val">'+lilyVisits+'</div><div class="stat-lbl">Lily\'s Visits \uD83E\uDDD2</div><div class="stat-sub">Play pool</div></div>';
 
-  /* Break-even card */
   document.getElementById('breakEvenCard').innerHTML=
     '<div class="card-title">Break-Even Progress</div>'+
     '<div style="display:flex;justify-content:space-between;font-size:13px;font-weight:600;margin-bottom:2px">'+
@@ -395,7 +491,6 @@ function render(){
     '<div class="progress-wrap"><div class="progress-bar" style="width:'+bePct+'%"></div><div class="progress-txt">'+bePct.toFixed(1)+'%</div></div>'+
     '<div style="font-size:10px;color:var(--txs);margin-top:5px;text-align:center">Based on 20-visit pass rate ($'+CASUAL_COST.toFixed(2)+'/visit) \u00b7 '+Math.ceil(wksLeft)+' weeks remaining</div>';
 
-  /* Pool breakdown */
   var pools={};
   all.forEach(function(v){if(!pools[v.pool])pools[v.pool]={c:0,d:0};pools[v.pool].c++;pools[v.pool].d+=(v.distance||0)});
   var ph='';
@@ -405,7 +500,6 @@ function render(){
   }}
   document.getElementById('poolBreakdown').innerHTML='<div class="card-title">Pool Breakdown</div><div class="pool-pills">'+ph+'</div>';
 
-  /* Log table – no edit button column */
   var tb=document.querySelector('#logTable tbody');tb.innerHTML='';
   for(var i=all.length-1;i>=0;i--){
     var v=all[i];
@@ -421,7 +515,6 @@ function render(){
 
 var cD,cW,cP;
 function renderCharts(){
-  /* Weekly Distance (km) – last 12 weeks */
   var td=todayStr();
   var curMon=getMonday(td);
   var weeks12=[];
@@ -430,7 +523,6 @@ function renderCharts(){
     weeks12.push(localDateStr(d));
   }
 
-  /* Build month-only labels */
   var monthLabels=buildMonthLabels(weeks12);
 
   var wkDist=weeks12.map(function(mon){
@@ -445,7 +537,6 @@ function renderCharts(){
     options:{responsive:true,plugins:{legend:{display:false}},scales:{x:{grid:{display:false},ticks:{font:{size:11},autoSkip:false,maxRotation:0}},y:{title:{display:true,text:'km',font:{size:11}},beginAtZero:true}}}
   });
 
-  /* Visits per Week – line chart over 12 weeks with same month labels */
   var wkVis=weeks12.map(function(mon){
     var sunD=new Date(mon+'T12:00:00');sunD.setDate(sunD.getDate()+6);
     var sun=localDateStr(sunD);
@@ -455,10 +546,9 @@ function renderCharts(){
   cW=new Chart(document.getElementById('chartWeek'),{
     type:'line',
     data:{labels:monthLabels,datasets:[{data:wkVis,borderColor:'#4fc3f7',backgroundColor:'rgba(79,195,247,.10)',fill:true,tension:.3,pointRadius:4,pointBackgroundColor:'#4fc3f7',borderWidth:2}]},
-    options:{responsive:true,plugins:{legend:{display:false}},scales:{x:{grid:{display:false},ticks:{font:{size:11},autoSkip:false,maxRotation:0}},y:{beginAtZero:true,ticks:{stepSize:1},title:{display:true,text:'Visits',font:{size:11}}}}}
+    options:{responsive:true,plugins:{legend:{display:false}},scales:{x:{grid:{display:false},ticks:{font:{size:11},autoSkip:false,maxRotation:0}},y:{beginAtZero:true,ticks:{stepSize:1},title:{display:true,text:'visits',font:{size:11}}}}}
   });
 
-  /* Break-Even Projection */
   var pv=poolVisits();
   var totalDays=365;
   var pacePoints=[];
@@ -478,7 +568,7 @@ function renderCharts(){
     data:{
       datasets:[
         {label:'Required Pace',data:pacePoints,showLine:true,borderColor:'#b0bec5',borderDash:[8,4],borderWidth:2,pointRadius:0,fill:false,tension:0},
-        {label:'Ryans Progress',data:actualPoints,showLine:true,borderColor:'#4caf50',backgroundColor:'rgba(76,175,80,.08)',borderWidth:2.5,pointRadius:2,pointBackgroundColor:'#4caf50',fill:true,tension:0.1},
+        {label:'Your Progress',data:actualPoints,showLine:true,borderColor:'#4caf50',backgroundColor:'rgba(76,175,80,.08)',borderWidth:2.5,pointRadius:2,pointBackgroundColor:'#4caf50',fill:true,tension:0.1},
         {label:'Today',data:[{x:todayDay,y:todayVisits}],pointRadius:7,pointBackgroundColor:'#4caf50',pointBorderColor:'#fff',pointBorderWidth:2.5,showLine:false}
       ]
     },
@@ -489,7 +579,7 @@ function renderCharts(){
         tooltip:{callbacks:{label:function(ctx){return ctx.dataset.label+': Day '+ctx.parsed.x+', '+ctx.parsed.y+' visits'}}}
       },
       scales:{
-        x:{type:'linear',min:0,max:totalDays,title:{display:true,text:'Days since pass started',font:{size:11}},grid:{display:false},ticks:{stepSize:60}},
+        x:{type:'linear',min:0,max:totalDays,title:{display:true,text:'Days since pass start',font:{size:11}},grid:{display:false},ticks:{stepSize:60}},
         y:{type:'linear',min:0,suggestedMax:BE_NEEDED+10,title:{display:true,text:'Pool visits',font:{size:11}},ticks:{stepSize:20}}
       }
     }
@@ -499,15 +589,14 @@ function renderCharts(){
 function openAdd(){editIdx=-1;document.getElementById('modalTitle').textContent='Add Visit';document.getElementById('inDate').value=todayStr();document.getElementById('inPool').value='Manly ABC';document.getElementById('inDist').value='';document.getElementById('modalBtns').innerHTML='<button class="btn-cancel" onclick="closeModal()">Cancel</button><button class="btn-save" onclick="saveVisit()">Save</button>';document.getElementById('modalBg').classList.add('show')}
 function openEdit(i){editIdx=i;var v=visits[i];document.getElementById('modalTitle').textContent='Edit Visit #'+(i+1);document.getElementById('inDate').value=v.date;document.getElementById('inPool').value=v.pool;document.getElementById('inDist').value=v.distance||0;document.getElementById('modalBtns').innerHTML='<button class="btn-delete" onclick="delVisit()">Delete</button><button class="btn-cancel" onclick="closeModal()">Cancel</button><button class="btn-save" onclick="saveVisit()">Save</button>';document.getElementById('modalBg').classList.add('show')}
 function closeModal(){document.getElementById('modalBg').classList.remove('show')}
-function saveVisit(){var d=document.getElementById('inDate').value;var p=document.getElementById('inPool').value;var m=parseInt(document.getElementById('inDist').value)||0;if(!d)return;if(editIdx>=0){visits[editIdx]={date:d,pool:p,distance:m}}else{visits.push({date:d,pool:p,distance:m})}save();closeModal();render()}
-function delVisit(){if(editIdx>=0&&confirm('Delete this visit?')){visits.splice(editIdx,1);save();closeModal();render()}}
+function saveVisit(){var d=document.getElementById('inDate').value;var p=document.getElementById('inPool').value;var m=parseInt(document.getElementById('inDist').value)||0;if(!d)return;if(editIdx>=0){visits[editIdx]={date:d,pool:p,distance:m}}else{visits.push({date:d,pool:p,distance:m})}save(false);closeModal();render()}
+function delVisit(){if(editIdx>=0&&confirm('Delete this visit?')){visits.splice(editIdx,1);save(false);closeModal();render()}}
 
-/* Tab click listeners */
 document.querySelectorAll('.tab').forEach(function(t){t.addEventListener('click',function(){switchTab(t.dataset.tab)})});
 document.getElementById('fabAdd').addEventListener('click',openAdd);
 document.getElementById('modalBg').addEventListener('click',function(e){if(e.target===e.currentTarget)closeModal()});
-document.getElementById('buildFooter').textContent='Built '+BUILD+' \u00b7 v4.5';
-load();render();
+document.getElementById('buildFooter').textContent='Built '+BUILD+' \u00b7 v4.6';
+load();
 </script>
 </body>
 </html>
