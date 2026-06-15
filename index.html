@@ -269,7 +269,7 @@ const PASS_START='2026-05-27';
 const PASS_END='2027-05-27';
 const CASUAL_COST=9.36;
 const BE_NEEDED=Math.ceil(PASS_COST/CASUAL_COST);
-const BUILD='15 Jun 2026 21:30 AEST';
+const BUILD='15 Jun 2026 22:15 AEST';
 
 /* ──────────────────────────────────────────────
    🔗 PASTE YOUR GOOGLE APPS SCRIPT URL BELOW
@@ -296,11 +296,33 @@ const SEED=[
 ];
 let visits=[],editIdx=-1;
 
+/* ── Date normalizer ──
+   Google Sheets may return dates as full Date strings like
+   "Tue May 27 2026 00:00:00 GMT+1000 (Australian Eastern Standard Time)"
+   This function ensures we always get a clean "yyyy-MM-dd" string. */
+function normalizeDate(val){
+  if(!val)return '';
+  var s=String(val).trim();
+  /* Already in yyyy-MM-dd format – pass through */
+  if(/^\d{4}-\d{2}-\d{2}$/.test(s))return s;
+  /* Try to parse as a date */
+  var d=new Date(s);
+  if(isNaN(d.getTime()))return s;
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+
+/* Normalize an entire visits array */
+function normalizeVisits(arr){
+  return arr.map(function(v){
+    return {date:normalizeDate(v.date),pool:String(v.pool||''),distance:Number(v.distance)||0};
+  });
+}
+
 /* ── Sync status indicator ── */
 function showSyncStatus(state,msg){
   var el=document.getElementById('syncStatus');
   var dot='<span class="sync-dot '+state+'"></span> ';
-  var labels={syncing:'Syncing…',synced:'Synced ☁️',offline:'Local only',error:'Sync error'};
+  var labels={syncing:'Syncing\u2026',synced:'Synced \u2601\uFE0F',offline:'Local only',error:'Sync error'};
   el.innerHTML=dot+(msg||labels[state]||state);
 }
 
@@ -320,7 +342,7 @@ function syncToCloud(){
   })
   .catch(function(err){
     console.error('Cloud sync error:',err);
-    showSyncStatus('error','Offline – saved locally');
+    showSyncStatus('error','Offline \u2013 saved locally');
   });
 }
 
@@ -332,7 +354,8 @@ function loadFromCloud(){
   .then(function(data){
     if(data.status==='ok'){
       showSyncStatus('synced');
-      return data.visits||[];
+      /* Normalize dates from Google Sheets */
+      return normalizeVisits(data.visits||[]);
     }else{
       showSyncStatus('error',data.message||'Load failed');
       return null;
@@ -340,7 +363,7 @@ function loadFromCloud(){
   })
   .catch(function(err){
     console.error('Cloud load error:',err);
-    showSyncStatus('error','Offline – using local data');
+    showSyncStatus('error','Offline \u2013 using local data');
     return null;
   });
 }
@@ -350,12 +373,14 @@ function load(){
   /* Load localStorage first for instant display */
   var s=localStorage.getItem(STORAGE_KEY);
   visits=s?JSON.parse(s):JSON.parse(JSON.stringify(SEED));
-  save(true); /* save to localStorage only, skip cloud */
+  /* Normalize local data too, just in case */
+  visits=normalizeVisits(visits);
+  saveLocal();
   render();
 
   /* Then fetch from cloud in background */
   loadFromCloud().then(function(cloudVisits){
-    if(cloudVisits===null)return; /* cloud unavailable, keep local */
+    if(cloudVisits===null)return;
     if(cloudVisits.length>0){
       /* Cloud has data – use it as source of truth */
       visits=cloudVisits;
@@ -369,18 +394,23 @@ function load(){
   });
 }
 
-function save(localOnly){
+function saveLocal(){
   visits.sort(function(a,b){return a.date<b.date?-1:a.date>b.date?1:0});
   localStorage.setItem(STORAGE_KEY,JSON.stringify(visits));
+}
+
+function save(localOnly){
+  visits=normalizeVisits(visits);
+  saveLocal();
   if(!localOnly)syncToCloud();
 }
 
 function localDateStr(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
 function todayStr(){return localDateStr(new Date())}
-function fmtD(d){const dt=new Date(d+'T12:00:00');const days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];const dn=days[dt.getDay()];const p=d.split('-');return dn+' '+p[2]+'/'+p[1]+'/'+p[0].slice(2)}
-function getMonday(ds){const d=new Date(ds+'T12:00:00');const day=d.getDay();const diff=d.getDate()-day+(day===0?-6:1);const m=new Date(d);m.setDate(diff);return localDateStr(m)}
-function weekLbl(m){const s=new Date(m+'T12:00:00');const e=new Date(s);e.setDate(e.getDate()+6);return s.toLocaleDateString('en-AU',{day:'numeric',month:'short'})+' \u2013 '+e.toLocaleDateString('en-AU',{day:'numeric',month:'short'})}
-function daysSince(dateStr){const d=new Date(dateStr+'T12:00:00');const s=new Date(PASS_START+'T12:00:00');return Math.round((d-s)/(864e5))}
+function fmtD(d){d=normalizeDate(d);var dt=new Date(d+'T12:00:00');var days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];var dn=days[dt.getDay()];var p=d.split('-');return dn+' '+p[2]+'/'+p[1]+'/'+p[0].slice(2)}
+function getMonday(ds){var d=new Date(ds+'T12:00:00');var day=d.getDay();var diff=d.getDate()-day+(day===0?-6:1);var m=new Date(d);m.setDate(diff);return localDateStr(m)}
+function weekLbl(m){var s=new Date(m+'T12:00:00');var e=new Date(s);e.setDate(e.getDate()+6);return s.toLocaleDateString('en-AU',{day:'numeric',month:'short'})+' \u2013 '+e.toLocaleDateString('en-AU',{day:'numeric',month:'short'})}
+function daysSince(dateStr){var d=new Date(dateStr+'T12:00:00');var s=new Date(PASS_START+'T12:00:00');return Math.round((d-s)/(864e5))}
 function poolVisits(){return visits.filter(function(v){return v.pool!=='Open Water'})}
 
 /* Build month-only labels for weeks12 array */
@@ -401,15 +431,15 @@ function buildMonthLabels(weeks12){
 }
 
 /* ── Swipe gesture ── */
-const tabOrder=['overview','charts','log'];
-let swipeX0=0,swipeY0=0;
+var tabOrder=['overview','charts','log'];
+var swipeX0=0,swipeY0=0;
 document.addEventListener('touchstart',function(e){swipeX0=e.changedTouches[0].screenX;swipeY0=e.changedTouches[0].screenY},{passive:true});
 document.addEventListener('touchend',function(e){
-  const dx=swipeX0-e.changedTouches[0].screenX;
-  const dy=swipeY0-e.changedTouches[0].screenY;
+  var dx=swipeX0-e.changedTouches[0].screenX;
+  var dy=swipeY0-e.changedTouches[0].screenY;
   if(Math.abs(dx)<50||Math.abs(dx)<Math.abs(dy))return;
-  const cur=document.querySelector('.tab.active').dataset.tab;
-  const idx=tabOrder.indexOf(cur);
+  var cur=document.querySelector('.tab.active').dataset.tab;
+  var idx=tabOrder.indexOf(cur);
   if(dx>0&&idx<tabOrder.length-1)switchTab(tabOrder[idx+1]);
   else if(dx<0&&idx>0)switchTab(tabOrder[idx-1]);
 },{passive:true});
@@ -595,7 +625,7 @@ function delVisit(){if(editIdx>=0&&confirm('Delete this visit?')){visits.splice(
 document.querySelectorAll('.tab').forEach(function(t){t.addEventListener('click',function(){switchTab(t.dataset.tab)})});
 document.getElementById('fabAdd').addEventListener('click',openAdd);
 document.getElementById('modalBg').addEventListener('click',function(e){if(e.target===e.currentTarget)closeModal()});
-document.getElementById('buildFooter').textContent='Built '+BUILD+' \u00b7 v4.6';
+document.getElementById('buildFooter').textContent='Built '+BUILD+' \u00b7 v4.7';
 load();
 </script>
 </body>
