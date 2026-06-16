@@ -162,12 +162,13 @@ html,body{
 /* ─── MODAL ─── */
 .modal-bg{display:none;position:fixed;inset:0;background:rgba(10,22,40,.45);z-index:300;align-items:center;justify-content:center;padding:0 16px}
 .modal-bg.show{display:flex}
-.modal{background:var(--card);width:100%;max-width:430px;border-radius:16px;padding:20px;max-height:85dvh;overflow-y:auto;animation:slideUp .25s ease}
+.modal{background:var(--card);width:100%;max-width:430px;border-radius:16px;padding:20px;max-height:85dvh;overflow-y:auto;overflow-x:hidden;animation:slideUp .25s ease}
 @keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
 .modal h2{font-size:17px;font-weight:700;margin-bottom:14px}
 .fg{margin-bottom:12px}
 .fg label{display:block;font-size:11px;font-weight:600;color:var(--txs);margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px}
 .fg input,.fg select{width:100%;max-width:100%;padding:10px 12px;border:1px solid var(--bdr);border-radius:8px;font-size:16px;font-family:inherit;background:#f8fafc;color:var(--tx);box-sizing:border-box}
+input[type="date"]{-webkit-appearance:none;appearance:none;min-width:0}
 .fg input:focus,.fg select:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(26,115,232,.12)}
 
 .modal-btns{display:flex;gap:8px;margin-top:14px}
@@ -192,6 +193,7 @@ html,body{
 <div class="header">
   <h1>🏊 Swim Tracker</h1>
   <p>Annual Pass · Warringah & Manly Aquatic Centres</p>
+  <p style="font-size:10px;opacity:.65;margin-top:2px;position:relative;z-index:3;letter-spacing:.2px;text-shadow:0 1px 4px rgba(0,0,0,.3)">Purchased: 27/05/2026 · Expires: 27/05/2027</p>
   <div class="sync-status" id="syncStatus"><span class="sync-dot offline"></span> Local only</div>
   <div class="header-spacer"></div>
   <div class="wave-container">
@@ -224,8 +226,8 @@ html,body{
   </div>
 
   <div class="tab-panel" id="tab-charts">
-    <div class="card"><div class="card-title">Weekly Distance (km) - Past 12 Weeks</div><div class="chart-box"><canvas id="chartDist"></canvas></div></div>
-    <div class="card"><div class="card-title">Visits per Week - Past 12 Weeks</div><div class="chart-box"><canvas id="chartWeek"></canvas></div></div>
+    <div class="card"><div class="card-title">Weekly Distance – Past 12 Weeks (km)</div><div class="chart-box"><canvas id="chartDist"></canvas></div></div>
+    <div class="card"><div class="card-title">Visits per Week – Past 12 Weeks</div><div class="chart-box"><canvas id="chartWeek"></canvas></div></div>
     <div class="card"><div class="card-title">Break-Even Projection</div><div class="chart-box"><canvas id="chartProj"></canvas></div></div>
   </div>
 
@@ -269,7 +271,7 @@ const PASS_START='2026-05-27';
 const PASS_END='2027-05-27';
 const CASUAL_COST=9.36;
 const BE_NEEDED=Math.ceil(PASS_COST/CASUAL_COST);
-const BUILD='15 Jun 2026 22:15 AEST';
+const BUILD='16 Jun 2026 17:30 AEST';
 
 /* ──────────────────────────────────────────────
    🔗 PASTE YOUR GOOGLE APPS SCRIPT URL BELOW
@@ -505,12 +507,13 @@ function render(){
   var lilyVisits=all.filter(function(v){return (v.distance||0)===0}).length;
 
   document.getElementById('statGrid').innerHTML=
-    '<div class="stat-card"><div class="stat-val">'+n+'</div><div class="stat-lbl">Total Visits</div></div>'+
+    '<div class="stat-card"><div class="stat-val">'+pn+'</div><div class="stat-lbl">Pool Visits</div></div>'+
     '<div class="stat-card"><div class="stat-val">$'+cpv.toFixed(2)+'</div><div class="stat-lbl">Cost / Visit</div><div class="stat-sub">Target \u2264 $'+CASUAL_COST.toFixed(2)+'</div></div>'+
     '<div class="stat-card"><div class="stat-val">'+(totalDist/1000).toFixed(1)+'<span>km</span></div><div class="stat-lbl">Total Distance</div></div>'+
     '<div class="stat-card"><div class="stat-val">'+wklyNeeded+'</div><div class="stat-lbl">Visits/Wk Needed</div><div class="stat-sub">To break even by expiry</div></div>'+
     '<div class="stat-card"><div class="stat-val">'+(roll7/1000).toFixed(1)+'<span>km</span></div><div class="stat-lbl">7-Day Rolling</div></div>'+
     '<div class="stat-card"><div class="stat-val">'+(twDist/1000).toFixed(1)+'<span>km</span></div><div class="stat-lbl">This Week</div><div class="stat-sub">'+twVis+' visit'+(twVis!==1?'s':'')+'</div></div>'+
+    '<div class="stat-card"><div class="stat-val">'+n+'</div><div class="stat-lbl">Total Swims</div><div class="stat-sub">Inc. open water</div></div>'+
     '<div class="stat-card"><div class="stat-val">'+lilyVisits+'</div><div class="stat-lbl">Lily\'s Visits \uD83E\uDDD2</div><div class="stat-sub">Play pool</div></div>';
 
   document.getElementById('breakEvenCard').innerHTML=
@@ -531,12 +534,14 @@ function render(){
   document.getElementById('poolBreakdown').innerHTML='<div class="card-title">Pool Breakdown</div><div class="pool-pills">'+ph+'</div>';
 
   var tb=document.querySelector('#logTable tbody');tb.innerHTML='';
+  var pca=[];var pc=0;for(var j=0;j<all.length;j++){if(all[j].pool!=='Open Water')pc++;pca.push(pc)}
   for(var i=all.length-1;i>=0;i--){
     var v=all[i];
-    var ac=(PASS_COST/(i+1)).toFixed(2);
+    var isOW=(v.pool==='Open Water');
+    var ac=isOW?'\u2014':'$'+(PASS_COST/pca[i]).toFixed(2);
     var cls='manly';if(v.pool==='Warringah')cls='warringah';if(v.pool==='Open Water')cls='openwater';
     var tr=document.createElement('tr');
-    tr.innerHTML='<td style="font-weight:600;color:var(--txs)">'+(i+1)+'</td><td>'+fmtD(v.date)+'</td><td><span class="pool-tag '+cls+'">'+v.pool+'</span></td><td>'+(v.distance||0)+'m</td><td>$'+ac+'</td>';
+    tr.innerHTML='<td style="font-weight:600;color:var(--txs)">'+(i+1)+'</td><td>'+fmtD(v.date)+'</td><td><span class="pool-tag '+cls+'">'+v.pool+'</span></td><td>'+(v.distance||0)+'m</td><td>'+ac+'</td>';
     tb.appendChild(tr);
   }
   setupLongPress();
@@ -625,7 +630,7 @@ function delVisit(){if(editIdx>=0&&confirm('Delete this visit?')){visits.splice(
 document.querySelectorAll('.tab').forEach(function(t){t.addEventListener('click',function(){switchTab(t.dataset.tab)})});
 document.getElementById('fabAdd').addEventListener('click',openAdd);
 document.getElementById('modalBg').addEventListener('click',function(e){if(e.target===e.currentTarget)closeModal()});
-document.getElementById('buildFooter').textContent='Built '+BUILD+' \u00b7 v4.7';
+document.getElementById('buildFooter').textContent='Built '+BUILD+' \u00b7 v4.8';
 load();
 </script>
 </body>
