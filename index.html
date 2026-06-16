@@ -220,14 +220,15 @@ input[type="date"]{-webkit-appearance:none;appearance:none;min-width:0}
 
 <div class="content">
   <div class="tab-panel active" id="tab-overview">
+    <div class="card" id="breakEvenCard"></div>
     <div class="stat-grid" id="statGrid"></div>
-    <div class="card" style="margin-top:12px" id="breakEvenCard"></div>
+    <div id="allSwimSection"></div>
     <div class="card" id="poolBreakdown"></div>
   </div>
 
   <div class="tab-panel" id="tab-charts">
     <div class="card"><div class="card-title">Weekly Distance – Past 12 Weeks (km)</div><div class="chart-box"><canvas id="chartDist"></canvas></div></div>
-    <div class="card"><div class="card-title">Visits per Week – Past 12 Weeks</div><div class="chart-box"><canvas id="chartWeek"></canvas></div></div>
+    <div class="card"><div class="card-title">Pool Visits per Week – Past 12 Weeks</div><div class="chart-box"><canvas id="chartWeek"></canvas></div></div>
     <div class="card"><div class="card-title">Break-Even Projection</div><div class="chart-box"><canvas id="chartProj"></canvas></div></div>
   </div>
 
@@ -509,12 +510,17 @@ function render(){
   document.getElementById('statGrid').innerHTML=
     '<div class="stat-card"><div class="stat-val">'+pn+'</div><div class="stat-lbl">Pool Visits</div></div>'+
     '<div class="stat-card"><div class="stat-val">$'+cpv.toFixed(2)+'</div><div class="stat-lbl">Cost / Visit</div><div class="stat-sub">Target \u2264 $'+CASUAL_COST.toFixed(2)+'</div></div>'+
-    '<div class="stat-card"><div class="stat-val">'+(totalDist/1000).toFixed(1)+'<span>km</span></div><div class="stat-lbl">Total Distance</div></div>'+
     '<div class="stat-card"><div class="stat-val">'+wklyNeeded+'</div><div class="stat-lbl">Visits/Wk Needed</div><div class="stat-sub">To break even by expiry</div></div>'+
-    '<div class="stat-card"><div class="stat-val">'+(roll7/1000).toFixed(1)+'<span>km</span></div><div class="stat-lbl">7-Day Rolling</div></div>'+
-    '<div class="stat-card"><div class="stat-val">'+(twDist/1000).toFixed(1)+'<span>km</span></div><div class="stat-lbl">This Week</div><div class="stat-sub">'+twVis+' visit'+(twVis!==1?'s':'')+'</div></div>'+
+    '<div class="stat-card"><div class="stat-val">'+lilyVisits+'</div><div class="stat-lbl">Lily\\'s Visits \uD83E\uDDD2</div><div class="stat-sub">Play pool</div></div>';
+
+  document.getElementById('allSwimSection').innerHTML=
+    '<div class="card" style="margin-top:12px"><div class="card-title">All Swimming</div>'+
+    '<div class="stat-grid" style="margin-top:8px">'+
     '<div class="stat-card"><div class="stat-val">'+n+'</div><div class="stat-lbl">Total Swims</div><div class="stat-sub">Inc. open water</div></div>'+
-    '<div class="stat-card"><div class="stat-val">'+lilyVisits+'</div><div class="stat-lbl">Lily\'s Visits \uD83E\uDDD2</div><div class="stat-sub">Play pool</div></div>';
+    '<div class="stat-card"><div class="stat-val">'+(totalDist/1000).toFixed(1)+'<span>km</span></div><div class="stat-lbl">Total Distance</div></div>'+
+    '<div class="stat-card"><div class="stat-val">'+(roll7/1000).toFixed(1)+'<span>km</span></div><div class="stat-lbl">7-Day Rolling</div></div>'+
+    '<div class="stat-card"><div class="stat-val">'+(twDist/1000).toFixed(1)+'<span>km</span></div><div class="stat-lbl">This Week</div><div class="stat-sub">'+twVis+' visit'+(twVis!==1?'s':'')+"</div></div>'+
+"    '</div></div>';
 
   document.getElementById('breakEvenCard').innerHTML=
     '<div class="card-title">Break-Even Progress</div>'+
@@ -539,9 +545,10 @@ function render(){
     var v=all[i];
     var isOW=(v.pool==='Open Water');
     var ac=isOW?'\u2014':'$'+(PASS_COST/pca[i]).toFixed(2);
+    var distTxt=(v.distance||0)===0?'\uD83E\uDDD2':(v.distance||0)+'m';
     var cls='manly';if(v.pool==='Warringah')cls='warringah';if(v.pool==='Open Water')cls='openwater';
     var tr=document.createElement('tr');
-    tr.innerHTML='<td style="font-weight:600;color:var(--txs)">'+(i+1)+'</td><td>'+fmtD(v.date)+'</td><td><span class="pool-tag '+cls+'">'+v.pool+'</span></td><td>'+(v.distance||0)+'m</td><td>'+ac+'</td>';
+    tr.innerHTML='<td style="font-weight:600;color:var(--txs)">'+(i+1)+'</td><td>'+fmtD(v.date)+'</td><td><span class="pool-tag '+cls+'">'+v.pool+'</span></td><td>'+distTxt+'</td><td>'+ac+'</td>';
     tb.appendChild(tr);
   }
   setupLongPress();
@@ -575,7 +582,7 @@ function renderCharts(){
   var wkVis=weeks12.map(function(mon){
     var sunD=new Date(mon+'T12:00:00');sunD.setDate(sunD.getDate()+6);
     var sun=localDateStr(sunD);
-    return visits.filter(function(v){return v.date>=mon&&v.date<=sun}).length;
+    return visits.filter(function(v){return v.date>=mon&&v.date<=sun&&v.pool!=='Open Water'}).length;
   });
   if(cW)cW.destroy();
   cW=new Chart(document.getElementById('chartWeek'),{
@@ -603,7 +610,7 @@ function renderCharts(){
     data:{
       datasets:[
         {label:'Required Pace',data:pacePoints,showLine:true,borderColor:'#b0bec5',borderDash:[8,4],borderWidth:2,pointRadius:0,fill:false,tension:0},
-        {label:'Your Progress',data:actualPoints,showLine:true,borderColor:'#4caf50',backgroundColor:'rgba(76,175,80,.08)',borderWidth:2.5,pointRadius:2,pointBackgroundColor:'#4caf50',fill:true,tension:0.1},
+        {label:'Your Progress',data:actualPoints,showLine:true,borderColor:'#4caf50',backgroundColor:'rgba(76,175,80,.08)',borderWidth:1.5,pointRadius:2,pointBackgroundColor:'#4caf50',fill:true,tension:0.1},
         {label:'Today',data:[{x:todayDay,y:todayVisits}],pointRadius:7,pointBackgroundColor:'#4caf50',pointBorderColor:'#fff',pointBorderWidth:2.5,showLine:false}
       ]
     },
@@ -630,7 +637,7 @@ function delVisit(){if(editIdx>=0&&confirm('Delete this visit?')){visits.splice(
 document.querySelectorAll('.tab').forEach(function(t){t.addEventListener('click',function(){switchTab(t.dataset.tab)})});
 document.getElementById('fabAdd').addEventListener('click',openAdd);
 document.getElementById('modalBg').addEventListener('click',function(e){if(e.target===e.currentTarget)closeModal()});
-document.getElementById('buildFooter').textContent='Built '+BUILD+' \u00b7 v4.8';
+document.getElementById('buildFooter').textContent='Built '+BUILD+' \u00b7 v4.9';
 load();
 </script>
 </body>
